@@ -1,0 +1,38 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      bottlejs:
+        specifier: ^2.0.1
+        version: 2.0.1
+      fp-ts:
+        specifier: ^2.16.10
+        version: 2.16.10
+      zod:
+        specifier: ^4.0.5
+        version: 4.0.5
+
+packages:
+
+  bottlejs@2.0.1:
+    resolution: {integrity: sha512-50T0bzqeAqZ+//kgjdDxNu7UP8Je04isNPyHPwwOOPoeZmtVESkuF9nwkWEqSEd9Sw1yJ1oaoHBAMxe/wG4Zzg==}
+
+  fp-ts@2.16.10:
+    resolution: {integrity: sha512-vuROzbNVfCmUkZSUbnWSltR1sbheyQbTzug7LB/46fEa1c0EucLeBaCEUE0gF3ZGUGBt9lVUiziGOhhj6K1ORA==}
+
+  zod@4.0.5:
+    resolution: {integrity: sha512-/5UuuRPStvHXu7RS+gmvRf4NXrNxpSllGwDnCBcJZtQsKrviYXm54yDGV2KYNLT5kq0lHGcl7lqWJLgSaG+tgA==}
+
+snapshots:
+
+  bottlejs@2.0.1: {}
+
+  fp-ts@2.16.10: {}
+
+  zod@4.0.5: {}
