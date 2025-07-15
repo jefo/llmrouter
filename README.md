@@ -1,176 +1,96 @@
-📘 Инженерная документация: MVP российского аналога OpenRouter
+# LLM Gateway
 
-🎯 Цель проекта
+**LLM Gateway** is an API proxy service designed for the CIS market, providing unified access to leading large language models (LLMs) like GPT-4, Claude 3, Mistral, and Gemini. It features transparent token-based billing, Telegram Pay integration, and a simple SDK for quick integration.
 
-Создать LLM API-прокси-сервис для рынка СНГ, предоставляющий:
+## Features
 
-доступ к ведущим языковым моделям (GPT-4, Claude 3, Mistral, Gemini и др.),
+- **Unified API Access**: Connect to multiple LLMs through a single, OpenAI-compatible API endpoint.
+- **Transparent Billing**: Pay for what you use with clear token-based billing.
+- **Telegram Pay Integration**: Convenient top-ups via Telegram Pay (initial MVP).
+- **API Key Management**: Secure generation and management of API keys with quotas.
+- **Rate Limiting**: Protects the system from abuse and ensures fair usage.
+- **Developer-Friendly**: Simple SDK and comprehensive documentation for quick start.
 
-оплату через Telegram Pay (на старте),
+## Architecture
 
-прозрачный биллинг с учётом токенов,
+```mermaid
+graph LR
+    Client[("Client (SDK/Bot/Web)")]
+    Client --> Gateway["TypeScript Gateway (Billing, Proxying)"]
+    Gateway --> Redis[Redis]
+    Gateway --> PostgreSQL[PostgreSQL]
+    Gateway --> OpenRouter[OpenRouter API]
+    OpenRouter --> Models[Models: GPT-4, Claude 3, Gemini...]
+    Gateway --> TelegramPay[Telegram Pay]
+    RequestProxying[Request Proxying] --> QuotaManagement[Quota Management]
+    Gateway --> RequestProxying
+    RequestProxying --> QuotaManagement
 
-простой SDK и документацию для быстрого старта.
+    subgraph Bounded Contexts
+        BillingAccess["Billing & Access (Core Domain)"]
+        RequestProxying
+        QuotaManagement
+    end
 
-🧱 Архитектура
+    BillingAccess --> LiteLLM
+    RequestProxying --> BillingAccess
 
-[ Клиент (SDK/бот/Web) ]
-        │
-        ▼
-[ TypeScript Gateway (обвязка) ] ←→ Redis ←→ PostgreSQL
-        │
-        ▼
-[ LiteLLM Proxy ]
-        │
-        ▼
-[ OpenRouter API ]
-        │
-        ▼
-[ Модели: GPT-4, Claude 3, Gemini... ]
+    style BillingAccess fill:#f9f,stroke:#333,stroke-width:2px
+    style RequestProxying fill:#ccf,stroke:#333,stroke-width:2px
+    style QuotaManagement fill:#cfc,stroke:#333,stroke-width:2px
+```
 
-Компоненты:
+## Getting Started
 
-TypeScript Gateway — точка входа. Проверка ключей, биллинг, проксирование.
+### Prerequisites
 
-LiteLLM Proxy — стандартный OpenAI-совместимый прокси. Управление fallback, API маршрутизацией.
+- [Bun](https://bun.sh/) v1.1.5 or later
+- Docker and Docker Compose
 
-Redis — хранение rate-limit и runtime usage.
+### Installation
 
-PostgreSQL — учёт токенов, ключей, транзакций, пользователей.
+1.  Clone the repository:
+    ```bash
+    git clone git@github.com:jefo/llmrouter.git
+    cd llmrouter
+    ```
+2.  Install dependencies using Bun:
+    ```bash
+    bun install
+    ```
+3.  Set up environment variables (e.g., for PostgreSQL, Redis, OpenRouter API keys).
 
-Telegram Pay — платёжный шлюз.
+### Running the Project
 
-📦 Используемый стек
+To run the development server:
 
-TypeScript + Hono или Express
+```bash
+bun run index.ts
+```
 
-LiteLLM (Docker)
+To start the full stack with Docker Compose (including LiteLLM, PostgreSQL, Redis):
 
-PostgreSQL (ORM: Drizzle или Prisma)
+```bash
+docker-compose up -d
+```
 
-Redis
+## Documentation
 
-Telegram Bot API
+Detailed engineering and product documentation can be found in the `docs/` directory:
 
-Docker Compose
+- [`docs/domain.md`](./docs/domain.md): Domain Model Documentation
+- [`docs/ProductBacklog.md`](./docs/ProductBacklog.md): Product Backlog
+- [`docs/application_layer.md`](./docs/application_layer.md): Application Layer Design
+- [`docs/technical.md`](./docs/technical.md): Technical Overview
 
-Zod для валидации
+## Contributing
 
-🧩 Модули системы
+We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) (coming soon) for more details.
 
-1. 📘 Auth & API Keys
+## License
 
-Генерация ключей (/v1/key/generate)
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-Привязка ключа к юзеру
+## Contact
 
-Установка квот (в токенах или рублях)
-
-Проверка авторизации через Bearer Header
-
-2. 📊 Биллинг и учёт токенов
-
-Хранение баланса токенов
-
-Списание токенов по usage.total_tokens от LiteLLM
-
-Лимиты и ограничения (daily, monthly, total)
-
-История расходов
-
-Пополнение через Telegram Pay
-
-3. 📡 Прокси-запросов
-
-Принимает OpenAI-совместимые вызовы (/v1/chat/completions и др.)
-
-Форвард на LiteLLM, с подменой model → openrouter/
-
-Обработка ошибок и прокидывание оригинальных ответов
-
-Логгирование x-router-log-id
-
-4. 🧾 Telegram Billing API
-
-Привязка Telegram user ID к аккаунту
-
-Генерация ссылок оплаты
-
-Вебхуки на успешные платежи
-
-Начисление токенов по тарифам
-
-Базовые команды:
-
-/start, /balance, /pay, /invite
-
-5. 📄 Документация (публичная)
-
-OpenAPI spec (/openapi.json)
-
-Примеры вызова через curl, Python, Node.js
-
-Гайды: как подключить LLM к своему боту / backend / IDE
-
-⚙️ Конфигурация LiteLLM (пример)
-
-general_settings:
-  master_key: sk-admin-secret
-  telemetry: true
-api_keys:
-  test-key: { monthly_quota: 1_000_000 }
-model_list:
-  - model_name: openrouter/gpt-4
-    litellm_params:
-      model: openrouter/openai/gpt-4
-      api_key: <openrouter-key>
-
-🧪 Тестирование
-
-Unit-тесты для всех middleware и core-функций (auth, billing, proxy)
-
-E2E тесты: LiteLLM ↔ Gateway ↔ Telegram Pay
-
-Локальный запуск через docker-compose up
-
-📈 Масштабирование
-
-Перенос LiteLLM на отдельный сервис (при нагрузке)
-
-Шардинг Redis (если >10k RPS)
-
-Переход на ClickHouse для логов и аналитики
-
-Stripe и другие платёжные шлюзы в будущем
-
-🔐 Безопасность и антифрод
-
-Rate limit на API ключи (Redis)
-
-Защита от повторных оплат (webhook deduplication)
-
-HMAC-подписи Telegram webhook
-
-Контроль IP / страна (в будущем)
-
-📅 Этапы внедрения
-
-Этап
-
-Цель
-
-1. MVP
-
-Генерация API-ключей, проксирование запросов, Telegram оплата
-
-2. Биллинг
-
-Учёт токенов, выставление тарифов, пополнение через Telegram
-
-3. Документация
-
-Публикация OpenAPI и SDK
-
-4. Рост
-
-Реферальная система, админка, Stripe/Qiwi подключение
+For any inquiries, please open an issue on GitHub or contact [your-email@example.com](mailto:your-email@example.com).
