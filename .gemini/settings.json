@@ -1,3 +1,14 @@
 {
-  "contextFileName": ["README.md", "ProductBacklog.md"]
+  "contextFileName": [
+    "README.md",
+    "ProductBacklog.md",
+    "docs/1_Pricing.md",
+    "docs/domain.md",
+    "docs/4_Flows.md",
+    "5_Error_Handling.md",
+    "docs/GEMINI.md",
+    "docs/OpenRouter.md",
+    "docs/application_layer.md",
+    "docs/2_API_Contracts.md"
+  ]
 }
