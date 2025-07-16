@@ -1,7 +1,12 @@
 // di.ts
 import Bottle from "bottlejs";
 
-export const container = new Bottle();
+export let container = new Bottle();
+
+// Функция для сброса контейнера в тестах
+export function resetContainer() {
+  container = new Bottle();
+}
 
 // Мапа: Aggregate -> string token
 const repositoryMap = new Map<Function, string>();

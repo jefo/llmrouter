@@ -1,8 +1,8 @@
 import z from "zod";
-import { UserAggregate } from "../../domain/user.agg";
-import { IUserRepo } from "../../domain/user.agg"; // Import the interface
-import { UserAlreadyExistsError } from "../../domain/errors"; // Import the custom error
-import { useRepository } from "../../lib/di";
+import { UserAggregate } from "@/domain/user.agg";
+import { IUserRepo } from "@/domain/user.agg"; // Import the interface
+import { UserAlreadyExistsError } from "@/domain/errors"; // Import the custom error
+import { useRepository } from "@/lib/di";
 
 export const registerUserCmdSchema = z.object({
   telegramId: z.number().int().positive(),

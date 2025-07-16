@@ -1,5 +1,8 @@
-import { UserAggregate } from "./domain/user.agg";
+import { registerRepositories } from "@/lib/di";
+import { UserAggregate } from "@/domain/user.agg";
 import { PgUserRepo } from "./infra/pg-user.repo";
-import { registerRepositories } from "./lib/di";
 
-registerRepositories([[UserAggregate, PgUserRepo]]);
+registerRepositories([
+  [UserAggregate, PgUserRepo],
+  // [PriceListAggregate, PgPriceListRepo], // Uncomment when ready
+]);
