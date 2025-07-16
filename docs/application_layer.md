@@ -2,131 +2,99 @@
 
 ## 1. Application Layer Principles
 
-- **Thin Layer**: Coordinates but doesn't contain business rules
-- **Domain Isolation**: Only layer that can directly call domain entities/services  
-- **Infrastructure Agnostic**: Depends on interfaces, not implementations
-- **Command-Oriented**: Each use case handles a Command representing user intent
+- **Thin Layer**: Coordinates but doesn't contain business rules.
+- **Domain Isolation**: Only layer that can directly call domain aggregates and services.
+- **Infrastructure Agnostic**: Depends on interfaces (ports), not concrete implementations (adapters).
+- **Command/Query-Oriented**: Each use case handles a Command (write) or Query (read) representing user intent.
 
-## 2. Use Cases
+## 2. Use Cases (Commands & Queries)
 
 ### 2.1. Register New User
-**Name**: RegisterNewUserUseCase  
-**Actor**: User (via Telegram bot)  
-**Purpose**: Create account and get first API key  
+- **Name**: `RegisterNewUserUseCase`
+- **Actor**: User (via Telegram bot)
+- **Purpose**: Create an account and get the first API key.
+- **Command**: `RegisterUserCommand { telegramId: number }`
+- **Flow**:
+    1. Check if User already exists (`IUserRepository.findByTelegramId`).
+    2. If not, create a new `User` aggregate.
+    3. Generate an API key (`user.generateApiKey()`).
+    4. Save the user (`IUserRepository.save`).
+    5. Return the new API key.
+- **Errors**: `UserAlreadyExistsError`.
 
-**Command**:  
-```typescript
-RegisterUserCommand {
-  telegramId: number
-}
-```
+### 2.2. Revoke and Generate API Key
+- **Name**: `RevokeAndGenerateApiKeyUseCase`
+- **Actor**: User (via Telegram bot)
+- **Purpose**: Deactivate the old key and issue a new one.
+- **Command**: `RevokeAndGenerateApiKeyCommand { userId: string }`
+- **Flow**:
+    1. Find `User` (`IUserRepository.findById`).
+    2. Call `user.revokeApiKey()` and `user.generateApiKey()`.
+    3. Save the user (`IUserRepository.save`).
+    4. Return the new API key.
+- **Errors**: `UserNotFoundError`.
 
-**Happy Path**:
-1. Check if User exists (IUserRepository.findByTelegramId)
-2. Create new User aggregate
-3. Generate API key (user.generateApiKey())
-4. Save user (IUserRepository.save)
-5. Return API key
+### 2.3. Proxy LLM Request
+- **Name**: `ProxyChatCompletionUseCase`
+- **Actor**: User (via API)
+- **Purpose**: Get an LLM response after all checks and atomically record usage.
+- **Dependencies**: `IQuotaRepository`, `IUserRepository`, `IPriceListRepository`, `ITransactionRepository`, `BalanceCalculator`, `UsageCostCalculator`, `LlmRouterAdapter`.
+- **Errors**: `RateLimitExceededError`, `InvalidApiKeyError`, `UserIsLockedError`, `InsufficientFundsError`, `ProviderError`.
+- **Flow**:
+    1. **Check Rate Limit**: Use `IQuotaRepository`.
+    2. **Authorize**: Find `User` by API key. Check `is_locked` status.
+    3. **Check Balance**: Use `BalanceCalculator` to get current balance. If balance is zero or negative, reject.
+    4. **Proxy to Provider**: Forward request to `LlmRouterAdapter`.
+        - On provider error, return `ProviderError`. **No state is changed.**
+        - On success, receive `usage_data` from provider.
+    5. **Atomic Write Operation (DB Transaction)**:
+        a. Calculate `cost` from `usage_data` using `UsageCostCalculator`.
+        b. Create a new `Transaction` of type `usage` with the `usage_data` and calculated `cost`.
+        c. Save the new `Transaction` via `ITransactionRepository`.
+        d. Recalculate the new balance. If it's now negative, update the `user` aggregate by calling `user.lock()`.
+        e. Save the updated `user` state via `IUserRepository`.
+    6. **Return Response**: Return the original provider response to the client.
 
-**Errors**: UserAlreadyExistsError
+### 2.4. Initiate Balance Top-Up
+- **Name**: `InitiateTopUpUseCase`
+- **Actor**: User (via Telegram bot)
+- **Purpose**: Get a payment link for balance top-up.
+- **Command**: `InitiateTopUpCommand { userId: string, amount: Money }`
+- **Flow**:
+    1. Find `User`.
+    2. Create a `PENDING` `Transaction`.
+    3. Save `Transaction` (`ITransactionRepository.save`).
+    4. Get payment link from `IPaymentGatewayAdapter`.
+    5. Return payment link.
 
----
+### 2.5. Confirm Top-Up (Webhook)
+- **Name**: `ConfirmTopUpUseCase`
+- **Actor**: Payment System (Telegram Pay)
+- **Purpose**: Complete a transaction and credit funds to the user's balance.
+- **Command**: `ConfirmTopUpCommand { providerPaymentId: string, status: 'completed' | 'failed', amount: Money }`
+- **Flow**:
+    1. Find `Transaction` by `providerPaymentId`.
+    2. Mark transaction as `completed`.
+    3. Save `Transaction`.
+    4. Publish `BalanceToppedUp` event.
+- **Errors**: `TransactionNotFoundError`, `TransactionAlreadyProcessedError`.
 
-### 2.2. Initiate Balance Top-Up  
-**Name**: InitiateTopUpUseCase  
-**Actor**: User (via Telegram bot)  
-**Purpose**: Get payment link for balance top-up  
+### 2.6. Get Models List (Query)
+- **Name**: `GetModelsListUseCase`
+- **Actor**: User (via API)
+- **Purpose**: Get a list of available models and their prices.
+- **Query**: `GetModelsListQuery {}`
+- **Flow**:
+    1. Fetch the active `PriceList` from `IPriceListRepository`.
+    2. Format the data according to the API contract in `2_API_Contracts.md`.
+    3. Return the list.
 
-**Command**:  
-```typescript
-InitiateTopUpCommand {
-  userId: string,
-  amount: Money
-}
-```
-
-**Happy Path**:
-1. Find User (IUserRepository.findById)
-2. Create PENDING Transaction
-3. Save Transaction (ITransactionRepository.save)
-4. Get payment link (IPaymentGatewayAdapter.createInvoice)
-5. Return payment link
-
-**Errors**: UserNotFoundError
-
----
-
-### 2.3. Confirm Top-Up (Webhook)  
-**Name**: ConfirmTopUpUseCase  
-**Actor**: Payment System (Telegram Pay)  
-**Purpose**: Complete Transaction and record funds  
-
-**Command**:  
-```typescript
-ConfirmTopUpCommand {
-  providerPaymentId: string,
-  status: 'completed' | 'failed',
-  amount: Money
-}
-```
-
-**Happy Path**:
-1. Find Transaction (ITransactionRepository)
-2. Verify status is 'completed'
-3. Complete transaction (transaction.complete())
-4. Save Transaction
-5. Publish BalanceToppedUp event
-
-**Errors**: TransactionNotFoundError, TransactionAlreadyProcessedError
-
----
-
-### 2.4. Proxy LLM Request  
-**Name**: ProxyChatCompletionUseCase  
-**Actor**: User (via API)  
-**Purpose**: Get LLM response after auth/balance checks  
-
-**Command**:  
-```typescript
-ProxyChatCommand {
-  apiKey: string,
-  requestPayload: object
-}
-```
-
-**Happy Path**:
-1. Find User by API key (IUserRepository.findByApiKey)
-2. Calculate balance (BalanceCalculator)
-3. Verify balance > 0
-4. Forward request (LlmRouter.forwardRequest)
-5. Return LLM response
-
-**Errors**: InvalidApiKeyError, InsufficientFundsError, ProviderError
-
----
-
-### 2.5. Check User Balance  
-**Name**: CheckBalanceUseCase  
-**Actor**: User (via Telegram bot)  
-**Purpose**: Get current balance  
-
-**Query**:  
-```typescript
-CheckBalanceQuery {
-  userId: string
-}
-```
-
-**Flow**:
-1. Find User
-2. Calculate balance (BalanceCalculator)
-3. Return balance
-
-**Note**: This is a Query (read-only operation)
-
-## 3. Implementation Guidance
-
-This documentation formalizes the application layer API. Development team can use it to:
-- Implement controllers/RPC handlers
-- Maintain clear boundary between orchestration and domain logic
-- Build flexible, testable system
+### 2.7. Check User Balance (Query)
+- **Name**: `CheckBalanceUseCase`
+- **Actor**: User (via Telegram bot)
+- **Purpose**: Get the current balance in RUB.
+- **Query**: `CheckBalanceQuery { userId: string }`
+- **Flow**:
+    1. Find all transactions for the user (`ITransactionRepository.getTransactionsFor(userId)`).
+    2. Calculate the sum of all transactions (positive for top-ups, negative for usage).
+    3. Return the final balance.

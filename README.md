@@ -82,6 +82,12 @@ Detailed engineering and product documentation can be found in the `docs/` direc
 - [`docs/ProductBacklog.md`](./docs/ProductBacklog.md): Product Backlog
 - [`docs/application_layer.md`](./docs/application_layer.md): Application Layer Design
 - [`docs/technical.md`](./docs/technical.md): Technical Overview
+- [`docs/1_Pricing.md`](./docs/1_Pricing.md): Pricing and Economics Model
+- [`docs/2_API_Contracts.md`](./docs/2_API_Contracts.md): API Contracts Specification
+- [`docs/3_Database_Schema.md`](./docs/3_Database_Schema.md): Detailed Database Schema
+- [`docs/4_Flows.md`](./docs/4_Flows.md): Complex Flow Diagrams
+- [`docs/5_Error_Handling.md`](./docs/5_Error_Handling.md): Error Handling Guide
+- [`docs/6_Admin_Tooling.md`](./docs/6_Admin_Tooling.md): Admin Tooling Requirements
 
 ## Contributing
 
