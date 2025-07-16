@@ -8,8 +8,8 @@ import { z } from "zod";
  */
 export const PriceSchema = z.object({
   modelName: z.string(),
-  inputPriceKopecksPer1M: z.bigint(),
-  outputPriceKopecksPer1M: z.bigint(),
+  inputPriceCreditsPer1M: z.number(),
+  outputPriceCreditsPer1M: z.number(),
   isActive: z.boolean(),
 });
 export type Price = z.infer<typeof PriceSchema>;

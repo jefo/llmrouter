@@ -1,4 +1,4 @@
-import { IUserRepo, UserAggregate, UserId } from "../../domain/user.agg";
+import { IUserRepo, UserAggregate, UserId } from "@/domain/user.agg";
 
 export class InMemoryUserRepo implements IUserRepo {
   private users = new Map<UserId, UserAggregate>();
@@ -14,6 +14,15 @@ export class InMemoryUserRepo implements IUserRepo {
   async findByTelegramId(telegramId: number): Promise<UserAggregate | null> {
     for (const user of this.users.values()) {
       if (user.telegramId === telegramId) {
+        return user;
+      }
+    }
+    return null;
+  }
+
+  async findByApiKey(apiKey: string): Promise<UserAggregate | null> {
+    for (const user of this.users.values()) {
+      if (user.isApiKeyValid(apiKey)) {
         return user;
       }
     }

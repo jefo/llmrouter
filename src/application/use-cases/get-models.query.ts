@@ -37,12 +37,12 @@ export const getModelsList = async (): Promise<GetModelsListResponseDto> => {
     created: Math.floor(Date.now() / 1000), // Placeholder
     owned_by: price.modelName.split("/")[0] || "unknown",
     pricing: {
-      prompt: `${(Number(price.inputPriceKopecksPer1M) / 100).toFixed(
+      prompt: `${price.inputPriceCreditsPer1M.toFixed(
         2
-      )} RUB/1M tokens`,
-      completion: `${(Number(price.outputPriceKopecksPer1M) / 100).toFixed(
+      )} Credits/1M tokens`,
+      completion: `${price.outputPriceCreditsPer1M.toFixed(
         2
-      )} RUB/1M tokens`,
+      )} Credits/1M tokens`,
     },
   }));
   return { object: "list", data: modelDtos };

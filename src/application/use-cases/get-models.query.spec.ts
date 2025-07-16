@@ -10,20 +10,20 @@ import { randomUUID } from "crypto";
 const mockPrices: Price[] = [
   {
     modelName: "openrouter/openai/gpt-4o",
-    inputPriceKopecksPer1M: 35000n, // 350.00 RUB
-    outputPriceKopecksPer1M: 105000n, // 1050.00 RUB
+    inputPriceCreditsPer1M: 350, // 350.00 Credits
+    outputPriceCreditsPer1M: 1050, // 1050.00 Credits
     isActive: true,
   },
   {
     modelName: "google/gemini-flash-1.5",
-    inputPriceKopecksPer1M: 3000n,
-    outputPriceKopecksPer1M: 6000n,
+    inputPriceCreditsPer1M: 30,
+    outputPriceCreditsPer1M: 60,
     isActive: true,
   },
   {
     modelName: "anthropic/claude-3-haiku",
-    inputPriceKopecksPer1M: 2000n,
-    outputPriceKopecksPer1M: 9000n,
+    inputPriceCreditsPer1M: 20,
+    outputPriceCreditsPer1M: 90,
     isActive: false, // This one should be filtered out
   },
 ];
@@ -55,13 +55,13 @@ describe("GetModelsListQuery", () => {
 
     const gpt4o = result.data.find((m) => m.id === "openrouter/openai/gpt-4o");
     expect(gpt4o).toBeDefined();
-    expect(gpt4o?.pricing.prompt).toBe("350.00 RUB/1M tokens");
-    expect(gpt4o?.pricing.completion).toBe("1050.00 RUB/1M tokens");
+    expect(gpt4o?.pricing.prompt).toBe("350.00 Credits/1M tokens");
+    expect(gpt4o?.pricing.completion).toBe("1050.00 Credits/1M tokens");
     expect(gpt4o?.owned_by).toBe("openrouter");
 
     const gemini = result.data.find((m) => m.id === "google/gemini-flash-1.5");
     expect(gemini).toBeDefined();
-    expect(gemini?.pricing.prompt).toBe("30.00 RUB/1M tokens");
+    expect(gemini?.pricing.prompt).toBe("30.00 Credits/1M tokens");
   });
 
   it("should return an empty list if no active pricelist is found", async () => {

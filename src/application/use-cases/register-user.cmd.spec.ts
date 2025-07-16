@@ -2,7 +2,10 @@ import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import { resetContainer, registerRepositories, useRepository } from "@/lib/di";
 import { UserAggregate, IUserRepo } from "@/domain/user.agg";
 import { InMemoryUserRepo } from "@/infra/in-memory-user.repo";
-import { registerUser, RegisterUserCmd } from "@/application/use-cases/register-user.cmd";
+import {
+  registerUser,
+  RegisterUserCmd,
+} from "@/application/use-cases/register-user.cmd";
 import { UserAlreadyExistsError } from "@/domain/errors";
 
 describe("RegisterUserUseCase", () => {
@@ -42,6 +45,6 @@ describe("RegisterUserUseCase", () => {
 
     // Act & Assert: пытаемся зарегистрировать еще раз и ожидаем ошибку
     const newCmd: RegisterUserCmd = { telegramId: 12345 };
-    await expect(registerUser(newCmd)).rejects.toThrow(UserAlreadyExistsError);
+    await expect(registerUser(newCmd, userRepo)).rejects.toThrow(UserAlreadyExistsError);
   });
 });

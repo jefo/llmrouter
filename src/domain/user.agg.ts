@@ -47,6 +47,7 @@ export const UserPropsSchema = z.object({
   id: UserIdSchema,
   telegramId: z.number().int().positive(),
   tokenBalance: z.number().int().min(0, "Token balance cannot be negative"),
+  
   apiKeys: z.array(ApiKeySchema),
 });
 export type UserProps = z.infer<typeof UserPropsSchema>;
@@ -84,6 +85,7 @@ export class UserAggregate {
       id: createUserId(),
       telegramId,
       tokenBalance: initialTokenBalance,
+      
       apiKeys: [
         {
           id: randomUUID(),
@@ -147,6 +149,17 @@ export class UserAggregate {
 
     key.status = "REVOKED";
     // В реальном приложении здесь бы публиковалось событие ApiKeyRevoked
+  }
+
+  /**
+   * Отзывает все активные API-ключи пользователя.
+   */
+  public revokeAllActiveApiKeys(): void {
+    this.props.apiKeys.forEach((key) => {
+      if (key.status === "ACTIVE") {
+        key.status = "REVOKED";
+      }
+    });
   }
 
   /**
@@ -227,10 +240,13 @@ export class UserAggregate {
   public getProps(): UserProps {
     return { ...this.props };
   }
+
+  
 }
 
 export interface IUserRepo {
   save(user: UserAggregate): Promise<void>;
   findById(id: UserId): Promise<UserAggregate | null>;
   findByTelegramId(telegramId: number): Promise<UserAggregate | null>;
+  findByApiKey(apiKey: string): Promise<UserAggregate | null>;
 }

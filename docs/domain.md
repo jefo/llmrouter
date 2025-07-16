@@ -2,7 +2,7 @@
 
 ## 1. Ubiquitous Language (Единый Язык)
 
-- **User**: Клиент сервиса, идентифицируемый через Telegram ID. Является владельцем API-ключей и Транзакций. Имеет флаг `is_locked`.
+- **User**: Клиент сервиса, идентифицируемый через Telegram ID. Является владельцем API-ключей и Транзакций.
 - **ApiKey**: Учетные данные для аутентификации запросов к Шлюзу.
 - **Transaction**: Неизменяемая запись о финансовой операции. Бывает типов `top-up` (пополнение) и `usage` (списание за использование).
 - **Usage**: **Value Object**, содержащий данные о потреблении токенов (`prompt_tokens`, `completion_tokens`, `model_name`), полученные от OpenRouter. Хранится внутри `usage`-транзакции.
@@ -36,8 +36,7 @@
 
 #### User Aggregate
 - **Root**: `User`
-- **State**: `is_locked` (boolean)
-- **Behavior**: `generateApiKey()`, `revokeApiKey()`, `lock()`, `unlock()`
+- **Behavior**: `generateApiKey()`, `revokeApiKey()`
 
 #### Transaction Aggregate
 - **Root**: `Transaction` (identified by `TransactionId`)

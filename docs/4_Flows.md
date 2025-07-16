@@ -21,11 +21,11 @@ sequenceDiagram
         Quota-->>GW: OK
     end
     GW->>GW: 2. Валидировать payload (проверить, что stream: false)
-    GW->>Billing: 3. Найти User по apiKey и проверить, что is_locked = FALSE
-    alt Ключ не найден или юзер заблокирован
-        Billing-->>GW: Ошибка Unauthorized / UserIsLocked
-        GW-->>C: 401 Unauthorized / 403 Forbidden
-    else Ключ валиден, юзер активен
+    GW->>Billing: 3. Найти User по apiKey
+    alt Ключ не найден
+        Billing-->>GW: Ошибка Unauthorized
+        GW-->>C: 401 Unauthorized
+    else Ключ валиден
         Billing-->>GW: User найден
     end
     GW->>Billing: 4. Вычислить текущий баланс

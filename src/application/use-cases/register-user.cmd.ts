@@ -3,6 +3,7 @@ import { UserAggregate } from "@/domain/user.agg";
 import { IUserRepo } from "@/domain/user.agg"; // Import the interface
 import { UserAlreadyExistsError } from "@/domain/errors"; // Import the custom error
 import { useRepository } from "@/lib/di";
+// import { useRepository } from "@/lib/di"; // Removed as userRepo is now passed as an argument
 
 export const registerUserCmdSchema = z.object({
   telegramId: z.number().int().positive(),
@@ -12,7 +13,7 @@ export type RegisterUserCmd = z.infer<typeof registerUserCmdSchema>;
 export const registerUser = async (
   dto: RegisterUserCmd
 ): Promise<{ apiKey: string }> => {
-  const userRepo = useRepository<IUserRepo>(UserAggregate); // Use IUserRepo interface
+  const userRepo = useRepository<IUserRepo>(UserAggregate); // Use the injected repository
 
   // 1. Проверить существование пользователя
   const existingUser = await userRepo.findByTelegramId(dto.telegramId);

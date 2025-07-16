@@ -1,4 +1,4 @@
-import { IPriceListRepo, PriceListAggregate, PriceListProps } from "@/domain/pricelist.agg.ts";
+import { PriceListAggregate } from "@/domain/pricelist.agg";
 import { randomUUID } from "crypto";
 
 export class InMemoryPriceListRepo implements IPriceListRepo {
