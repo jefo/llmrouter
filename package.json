@@ -15,6 +15,7 @@
   "dependencies": {
     "bottlejs": "^2.0.1",
     "fp-ts": "^2.16.10",
+    "hono": "^4.9.0",
     "zod": "^4.0.5"
   }
 }

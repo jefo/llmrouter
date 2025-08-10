@@ -1,236 +1,194 @@
 import { z } from "zod";
-import { randomUUID, createHash } from "crypto";
+import { createBrandedId } from "../lib/branded-id";
+import { createValueObject } from "../lib/value-object";
+import { createAggregate } from "../lib/aggregate";
+import { createPort } from "../lib/di";
 
-// --- Value Objects and Schemas ---
+// --- Helper Functions (moved outside aggregate) ---
+// Using Bun's crypto for hashing
+import { randomUUID } from "crypto";
 
-/**
- * Схема для UserId.
- * Используем Zod-бренд для создания номинального типа, что обеспечивает
- * типобезопасность на уровне компиляции.
- */
-export const UserIdSchema = z.string().uuid().brand<"UserId">();
-export type UserId = z.infer<typeof UserIdSchema>;
+function generateHashedApiKey(): {
+  apiKey: string;
+  hashedApiKey: string;
+} {
+  const apiKey = `sk-${randomUUID()}`;
+  // Bun.password.hash is async, so we need to use a synchronous hash for now
+  // or make the action async and handle it in the use case.
+  // For simplicity and to match original sync behavior, using createHash.
+  const hashedApiKey = hashApiKey(apiKey);
+  return { apiKey, hashedApiKey };
+}
 
-/**
- * Фабричная функция для создания UserId.
- * @param id - опциональный UUID. Если не предоставлен, генерируется новый.
- */
-export const createUserId = (id?: string): UserId => {
-  return UserIdSchema.parse(id || randomUUID());
-};
+function hashApiKey(apiKey: string): string {
+  // Using Node.js crypto for hashing, compatible with Bun
+  const crypto = require('crypto');
+  return crypto.createHash("sha256").update(apiKey).digest("hex");
+}
 
-/**
- * Статус API-ключа.
- * - ACTIVE: Ключ активен и может использоваться для запросов.
- * - REVOKED: Ключ отозван и больше не действителен.
- */
+// --- Branded ID: UserId ---
+export const UserId = createBrandedId("UserId");
+export type UserId = InstanceType<typeof UserId>;
+
+// --- Value Object: ApiKey ---
 export const ApiKeyStatusSchema = z.enum(["ACTIVE", "REVOKED"]);
 export type ApiKeyStatus = z.infer<typeof ApiKeyStatusSchema>;
 
-/**
- * Схема для представления API-ключа.
- * Каждый ключ имеет уникальный ID, хешированное значение, статус и дату создания.
- */
 export const ApiKeySchema = z.object({
   id: z.string().uuid(),
   hashedKey: z.string(),
   status: ApiKeyStatusSchema,
   createdAt: z.date(),
 });
-export type ApiKey = z.infer<typeof ApiKeySchema>;
+export type ApiKeyProps = z.infer<typeof ApiKeySchema>;
+export const ApiKey = createValueObject(ApiKeySchema);
+export type ApiKey = InstanceType<typeof ApiKey>;
 
-/**
- * Схема свойств для агрегата User.
- * Валидирует инварианты на уровне данных.
- */
+// --- Aggregate: User ---
 export const UserPropsSchema = z.object({
-  id: UserIdSchema,
+  id: z.string().uuid(), // Use string UUID for schema, convert to BrandedId in aggregate creation
   telegramId: z.number().int().positive(),
   tokenBalance: z.number().int().min(0, "Token balance cannot be negative"),
   apiKeys: z.array(ApiKeySchema),
+  isLocked: z.boolean().default(false), // Added from ProductBacklog
 });
 export type UserProps = z.infer<typeof UserPropsSchema>;
 
-// --- Aggregate Root ---
-
-/**
- * Агрегат User.
- * Центральная сущность в контексте "Billing & Access".
- * Управляет жизненным циклом API-ключей и балансом токенов пользователя.
- */
-export class UserAggregate {
-  static name: string = "User";
-  private props: UserProps;
-
-  private constructor(props: UserProps) {
-    // Валидация инвариантов при создании или восстановлении объекта
-    UserPropsSchema.parse(props);
-    this.props = props;
-  }
-
-  /**
-   * Фабричный метод для создания нового пользователя.
-   * @param telegramId - Уникальный идентификатор пользователя в Telegram.
-   * @param initialTokenBalance - Начальный баланс токенов.
-   * @returns Экземпляр класса User и сгенерированный API-ключ.
-   */
-  public static create(
-    telegramId: number,
-    initialTokenBalance = 10000
-  ): { user: UserAggregate; apiKey: string } {
-    const { apiKey, hashedApiKey } = UserAggregate.generateHashedApiKey();
-
-    const user = new UserAggregate({
-      id: createUserId(),
-      telegramId,
-      tokenBalance: initialTokenBalance,
-      apiKeys: [
-        {
-          id: randomUUID(),
-          hashedKey: hashedApiKey,
-          status: "ACTIVE",
-          createdAt: new Date(),
-        },
-      ],
-    });
-
-    return { user, apiKey };
-  }
-
-  /**
-   * Восстанавливает существующего пользователя из хранилища.
-   * @param props - Свойства пользователя.
-   * @returns Экземпляр класса User.
-   */
-  public static restore(props: UserProps): UserAggregate {
-    return new UserAggregate(props);
-  }
-
-  /**
-   * Генерирует новый API-ключ для пользователя.
-   * @returns Сгенерированный API-ключ (нехешированный).
-   */
-  public generateApiKey(): { apiKey: string } {
-    if (this.props.apiKeys.filter((k) => k.status === "ACTIVE").length >= 5) {
-      throw new Error("User cannot have more than 5 active API keys.");
+export const User = createAggregate({
+  name: "User",
+  schema: UserPropsSchema,
+  invariants: [
+    (state) => {
+      if (state.tokenBalance < 0 && !state.isLocked) {
+        throw new Error("User with negative balance must be locked.");
+      }
+      if (state.tokenBalance >= 0 && state.isLocked) {
+        throw new Error("User with positive balance cannot be locked.");
+      }
+    },
+    (state) => {
+      const activeKeysCount = state.apiKeys.filter(k => k.props.status === "ACTIVE").length;
+      if (activeKeysCount > 5) {
+        throw new Error("User cannot have more than 5 active API keys.");
+      }
     }
+  ],
+  actions: {
+    // Removed initialize action. User.create will handle initial setup.
 
-    const { apiKey, hashedApiKey } = UserAggregate.generateHashedApiKey();
+    generateApiKey: (state: UserProps) => {
+      const activeKeysCount = state.apiKeys.filter(k => k.props.status === "ACTIVE").length;
+      if (activeKeysCount >= 5) {
+        throw new Error("User cannot have more than 5 active API keys.");
+      }
 
-    const newKey: ApiKey = {
+      const { apiKey, hashedApiKey } = generateHashedApiKey();
+      const newKey = ApiKey.create({
+        id: randomUUID(),
+        hashedKey: hashedApiKey,
+        status: "ACTIVE",
+        createdAt: new Date(),
+      });
+
+      const updatedApiKeys = [...state.apiKeys, newKey.props];
+      return { state: { ...state, apiKeys: updatedApiKeys }, event: { type: "ApiKeyGenerated", userId: state.id, apiKey } };
+    },
+
+    revokeApiKey: (state: UserProps, apiKeyId: string) => {
+      const keyToRevoke = state.apiKeys.find(k => k.props.id === apiKeyId);
+      if (!keyToRevoke) {
+        throw new Error("API key not found.");
+      }
+      if (keyToRevoke.props.status === "REVOKED") {
+        console.warn(`API key ${apiKeyId} is already revoked.`);
+        return { state: state }; // No state change if already revoked
+      }
+
+      const updatedApiKeys = state.apiKeys.map(k =>
+        k.props.id === apiKeyId ? { ...k.props, status: "REVOKED" } : k.props
+      );
+      return { state: { ...state, apiKeys: updatedApiKeys }, event: { type: "ApiKeyRevoked", userId: state.id, apiKeyId } };
+    },
+
+    debitTokens: (state: UserProps, amount: number) => {
+      if (amount <= 0) {
+        throw new Error("Amount must be positive.");
+      }
+      const newBalance = state.tokenBalance - amount;
+      const isLocked = newBalance < 0; // Lock if balance goes negative
+      return { state: { ...state, tokenBalance: newBalance, isLocked } };
+    },
+
+    creditTokens: (state: UserProps, amount: number) => {
+      if (amount <= 0) {
+        throw new Error("Amount must be positive.");
+      }
+      const newBalance = state.tokenBalance + amount;
+      const isLocked = newBalance < 0; // Still locked if balance is negative after credit
+      return { state: { ...state, tokenBalance: newBalance, isLocked } };
+    },
+
+    lock: (state: UserProps) => {
+      if (state.isLocked) {
+        return { state: state }; // Already locked
+      }
+      return { state: { ...state, isLocked: true } };
+    },
+
+    unlock: (state: UserProps) => {
+      if (!state.isLocked) {
+        return { state: state }; // Already unlocked
+      }
+      return { state: { ...state, isLocked: false } };
+    },
+
+    isApiKeyValid: (state: UserProps, apiKey: string) => {
+      const hashedKey = hashApiKey(apiKey);
+      const isValid = state.apiKeys.some(
+        (k) => k.props.hashedKey === hashedKey && k.props.status === "ACTIVE"
+      );
+      return { state: state, event: { type: "ApiKeyValidation", userId: state.id, isValid } }; // Actions must return state, can return event
+    },
+  },
+});
+export type User = InstanceType<typeof User>;
+
+// --- Ports for User Repository ---
+export const FindUserByIdPort = createPort<(id: UserId) => Promise<User | null>>();
+export type FindUserByIdPort = typeof FindUserByIdPort;
+
+export const FindUserByTelegramIdPort = createPort<(telegramId: number) => Promise<User | null>>();
+export type FindUserByTelegramIdPort = typeof FindUserByTelegramIdPort;
+
+export const SaveUserPort = createPort<(user: User) => Promise<void>>();
+export type SaveUserPort = typeof SaveUserPort;
+
+// Override User.create to handle initial API key generation
+// This is a common pattern when the aggregate's initial state depends on external factors (like generating a key)
+const originalUserCreate = User.create;
+User.create = (props: UserProps): User => {
+  // If creating a brand new user (no ID provided, or minimal props)
+  if (!props.id || props.apiKeys.length === 0) {
+    const { apiKey, hashedApiKey } = generateHashedApiKey();
+    const newKey = ApiKey.create({
       id: randomUUID(),
       hashedKey: hashedApiKey,
       status: "ACTIVE",
       createdAt: new Date(),
+    });
+
+    const initialProps: UserProps = {
+      id: randomUUID(), // Generate new ID for new user
+      telegramId: props.telegramId, // Use telegramId from props
+      tokenBalance: props.tokenBalance || 1500, // Default bonus 15.00 RUB (1500 kopecks)
+      apiKeys: [newKey.props], // Store props of Value Object
+      isLocked: false,
     };
-
-    this.props.apiKeys.push(newKey);
-    // В реальном приложении здесь бы публиковалось событие ApiKeyGenerated
-    return { apiKey };
+    const userInstance = originalUserCreate(initialProps);
+    // Attach the generated API key to the instance for retrieval by the use case
+    (userInstance as any)._generatedApiKey = apiKey;
+    return userInstance;
   }
-
-  /**
-   * Отзывает API-ключ.
-   * @param apiKeyId - ID ключа, который нужно отозвать.
-   */
-  public revokeApiKey(apiKeyId: string): void {
-    const key = this.props.apiKeys.find((k) => k.id === apiKeyId);
-
-    if (!key) {
-      throw new Error("API key not found.");
-    }
-    if (key.status === "REVOKED") {
-      // Можно бросить ошибку или просто проигнорировать
-      console.warn(`API key ${apiKeyId} is already revoked.`);
-      return;
-    }
-
-    key.status = "REVOKED";
-    // В реальном приложении здесь бы публиковалось событие ApiKeyRevoked
-  }
-
-  /**
-   * Списывает токены с баланса пользователя.
-   * @param amount - Количество токенов для списания.
-   */
-  public debitTokens(amount: number): void {
-    if (amount <= 0) {
-      throw new Error("Amount must be positive.");
-    }
-    if (this.props.tokenBalance < amount) {
-      throw new Error("Insufficient token balance."); // 402 Payment Required
-    }
-    this.props.tokenBalance -= amount;
-  }
-
-  /**
-   * Пополняет баланс токенов пользователя.
-   * @param amount - Количество токенов для начисления.
-   */
-  public creditTokens(amount: number): void {
-    if (amount <= 0) {
-      throw new Error("Amount must be positive.");
-    }
-    this.props.tokenBalance += amount;
-  }
-
-  /**
-   * Проверяет, действителен ли предоставленный API-ключ.
-   * @param apiKey - Ключ для проверки.
-   * @returns true, если ключ активен.
-   */
-  public isApiKeyValid(apiKey: string): boolean {
-    const hashedKey = UserAggregate.hashApiKey(apiKey);
-    return this.props.apiKeys.some(
-      (k) => k.hashedKey === hashedKey && k.status === "ACTIVE"
-    );
-  }
-
-  // --- Вспомогательные методы ---
-
-  private static generateHashedApiKey(): {
-    apiKey: string;
-    hashedApiKey: string;
-  } {
-    const apiKey = `sk-${randomUUID()}`;
-    const hashedApiKey = UserAggregate.hashApiKey(apiKey);
-    return { apiKey, hashedApiKey };
-  }
-
-  private static hashApiKey(apiKey: string): string {
-    return createHash("sha256").update(apiKey).digest("hex");
-  }
-
-  // --- Геттеры для доступа к состоянию ---
-
-  public get id(): UserId {
-    return this.props.id;
-  }
-
-  public get telegramId(): number {
-    return this.props.telegramId;
-  }
-
-  public get tokenBalance(): number {
-    return this.props.tokenBalance;
-  }
-
-  public get apiKeys(): Readonly<ApiKey[]> {
-    return this.props.apiKeys;
-  }
-
-  /**
-   * Возвращает состояние агрегата для сохранения в БД.
-   * ВАЖНО: При сохранении нужно будет преобразовать UserId в строку.
-   * Например: { ...user.getProps(), id: user.id.value }
-   */
-  public getProps(): UserProps {
-    return { ...this.props };
-  }
-}
-
-export interface IUserRepo {
-  save(user: UserAggregate): Promise<void>;
-  findById(id: UserId): Promise<UserAggregate | null>;
-  findByTelegramId(telegramId: number): Promise<UserAggregate | null>;
-}
+  // If restoring from DB, just use original create
+  return originalUserCreate(props);
+};
